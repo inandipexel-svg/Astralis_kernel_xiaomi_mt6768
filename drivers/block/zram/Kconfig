@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: GPL-2.0
+config ZRAM
+	tristate "Compressed RAM block device support"
+	depends on BLOCK && SYSFS && ZSMALLOC && CRYPTO
+	select CRYPTO_LZO
+	default n
+	help
+	  Creates virtual block devices called /dev/zramX (X = 0, 1, ...).
+	  Pages written to these disks are compressed and stored in memory
+	  itself. These disks allow very fast I/O and compression provides
+	  good amounts of memory savings.
+
+	  It has several use cases, for example: /tmp storage, use as swap
+	  disks and maybe many more.
+
+	  See Documentation/blockdev/zram.txt for more information.
+
+config ZRAM_WRITEBACK
+       bool "Write back incompressible or idle page to backing device"
+       depends on ZRAM
+       default n
+       help
+	 With incompressible page, there is no memory saving to keep it
+	 in memory. Instead, write it out to backing device.
+	 For this feature, admin should set up backing device via
+	 /sys/block/zramX/backing_dev.
+
+	 With /sys/block/zramX/{idle,writeback}, application could ask
+	 idle page's writeback to the backing device to save in memory.
+
+	 See Documentation/blockdev/zram.txt for more information.
+
+config ZRAM_MEMORY_TRACKING
+	bool "Track zRam block status"
+	depends on ZRAM && DEBUG_FS
+	help
+	  With this feature, admin can track the state of allocated blocks
+	  of zRAM. Admin could see the information via
+	  /sys/kernel/debug/zram/zramX/block_state.
+
+	  See Documentation/blockdev/zram.txt for more information.
+
+config ZRAM_MULTI_COMP
+	bool "Enable multiple compression streams"
+	depends on ZRAM && 64BIT
+	help
+	  Enable secondary compression algorithms and manual page recompression.
+	  This can improve memory savings for huge or idle pages at the cost of
+	  additional CPU time. Idle pages can be marked through the zram idle
+	  attribute; CONFIG_ZRAM_MEMORY_TRACKING additionally exposes timestamps.
+
+config ZRAM_AUTO_RECOMP
+	bool "Automatically recompress cold ZRAM pages"
+	depends on ZRAM && ZRAM_MULTI_COMP
+	default n
+	help
+	  Periodically recompress cold zram slots using the configured secondary
+	  compression algorithms. A slot is marked as a candidate and is only
+	  recompressed on a later pass if it has not been accessed in between.
+	  The worker uses bounded scans and a bounded recompression batch. Manual
+	  recompression remains available independently of this option.
+
+config ZRAM_AUTO_RECOMP_ALGORITHM
+	string "Default secondary ZRAM compression algorithm"
+	depends on ZRAM_AUTO_RECOMP
+	default "zstd"
+	help
+	  Secondary compressor used by automatic cold-page recompression.
+	  The primary compressor remains unchanged. The selected algorithm must
+	  be enabled in the kernel Crypto API. Leave empty to disable the default
+	  secondary compressor and configure one through recomp_algorithm instead.
+
+config ZRAM_AUTO_RECOMP_INTERVAL
+	int "Seconds between automatic ZRAM recompression passes"
+	depends on ZRAM_AUTO_RECOMP
+	range 30 3600
+	default 120
+	help
+	  Delay between background passes. A page must remain untouched between
+	  candidate marking and a later processing pass to be eligible.
+
+config ZRAM_AUTO_RECOMP_PAGES
+	int "ZRAM slots per automatic mark/process window"
+	depends on ZRAM_AUTO_RECOMP
+	range 256 65536
+	default 16384
+	help
+	  Maximum number of zram slots scanned by each mark/process pass.
+
+config ZRAM_AUTO_RECOMP_MAX_PAGES
+	int "Maximum automatic recompressions per pass"
+	depends on ZRAM_AUTO_RECOMP
+	range 16 4096
+	default 256
+	help
+	  Limit candidate recompressions in one pass to keep background CPU and
+	  memory-allocation work bounded.

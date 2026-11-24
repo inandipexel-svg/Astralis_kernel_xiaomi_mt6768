@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# DAMON components backported for the Hysteris Linux 4.19.325 tree.
+# Physical-address monitoring is sufficient for proactive reclaim and
+# LRU sorting; virtual-address and sysfs interfaces are intentionally
+# excluded from this first port.
+
+menu "Data Access Monitoring"
+
+config DAMON
+	bool "DAMON: Data Access Monitoring Framework"
+	help
+	  This builds the Data Access MONitor framework.  It samples memory
+	  access activity and exposes region-level access/age information to
+	  kernel policies.
+
+config DAMON_PADDR
+	bool "DAMON physical address monitoring operations"
+	depends on DAMON && MMU && MIGRATION
+	select IDLE_PAGE_TRACKING
+	default DAMON
+	help
+	  Build physical-address monitoring using page-table young bits,
+	  idle-page tracking, and reverse mapping.  This is the backend used
+	  by DAMON_RECLAIM and DAMON_LRU_SORT.
+
+config DAMON_RECLAIM
+	bool "DAMON-based proactive page reclaim"
+	depends on DAMON_PADDR
+	help
+	  Reclaim cold physical memory proactively under bounded time and
+	  page-out quotas.  The normal split-LRU reclaimer remains responsible
+	  for allocation-time and heavy-pressure reclaim.  Disabled by default
+	  at runtime; enable through damon_reclaim.enabled.
+
+config DAMON_LRU_SORT
+	bool "DAMON-based hot/cold LRU sorting"
+	depends on DAMON_PADDR
+	help
+	  Protect hot pages and deactivate cold pages using DAMON access
+	  observations.  Hysteris provides the generic deactivate_page()
+	  helper, so both hot and cold actions are implemented for anon and
+	  file-backed pages.  Disabled by default at runtime; enable through
+	  damon_lru_sort.enabled.
+
+endmenu
