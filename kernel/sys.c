@@ -1281,14 +1281,15 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	if (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
 		susfs_spoof_uname(&tmp);
 #endif
-	/* BPF / Netd Uname Spoof: compatibility hint for Android userspace. */
-	if (bpf_netd_uname_spoof_needed())
-		strlcpy(tmp.release, "5.10.0", sizeof(tmp.release));
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
 	if (override_release(name->release, sizeof(name->release)))
+		return -EFAULT;
+	/* Keep the spoof as the final release override, including UNAME26 tasks. */
+	if (bpf_netd_uname_spoof_needed() &&
+	    copy_to_user(name->release, "5.10.0", sizeof("5.10.0")))
 		return -EFAULT;
 	if (override_architecture(name))
 		return -EFAULT;
@@ -1308,13 +1309,14 @@ SYSCALL_DEFINE1(uname, struct old_utsname __user *, name)
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
-	if (bpf_netd_uname_spoof_needed())
-		strlcpy(tmp.release, "5.10.0", sizeof(tmp.release));
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
 	if (override_release(name->release, sizeof(name->release)))
+		return -EFAULT;
+	if (bpf_netd_uname_spoof_needed() &&
+	    copy_to_user(name->release, "5.10.0", sizeof("5.10.0")))
 		return -EFAULT;
 	if (override_architecture(name))
 		return -EFAULT;
