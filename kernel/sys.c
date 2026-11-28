@@ -1256,6 +1256,21 @@ static int override_release(char __user *release, size_t len)
 extern struct static_key_false susfs_is_uname_spoof_buffer_set;
 extern void susfs_spoof_uname(struct new_utsname* tmp);
 #endif
+/*
+ * Android BPF loaders and netd on newer userspace may gate functionality
+ * on the reported kernel release. Keep the compatibility spoof restricted
+ * to the root-owned loader/network daemon processes.
+ */
+static bool bpf_netd_uname_spoof_needed(void)
+{
+	if (!uid_eq(current_uid(), GLOBAL_ROOT_UID))
+		return false;
+
+	return !strncmp(current->comm, "bpfloader", sizeof("bpfloader") - 1) ||
+	       !strncmp(current->comm, "netbpfload", sizeof("netbpfload") - 1) ||
+	       !strncmp(current->comm, "netd", sizeof("netd") - 1);
+}
+
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	struct new_utsname tmp;
@@ -1266,6 +1281,9 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	if (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
 		susfs_spoof_uname(&tmp);
 #endif
+	/* BPF / Netd Uname Spoof: compatibility hint for Android userspace. */
+	if (bpf_netd_uname_spoof_needed())
+		strlcpy(tmp.release, "5.10.0", sizeof(tmp.release));
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
@@ -1290,6 +1308,8 @@ SYSCALL_DEFINE1(uname, struct old_utsname __user *, name)
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
+	if (bpf_netd_uname_spoof_needed())
+		strlcpy(tmp.release, "5.10.0", sizeof(tmp.release));
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
